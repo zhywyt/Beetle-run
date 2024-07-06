@@ -15,11 +15,148 @@ https://github.com/LC044/WeChatMsg
 #include <string>
 #include <map>
 #include <vector>
+#include <algorithm>
+#include <cstdlib>
+#include <cstring>
+// —————————————————————————————————————————————————
+#ifdef _WIN32
+#include <direct.h>		//for mkdir rmdir
+#include <io.h>			//for access
+#elif __linux__
+#include <unistd.h>		//for mkdir rmdir
+#include <sys/stat.h>	//for access
+#include <dirent.h>		//for DIR remove
+#endif
+ 
+#ifdef _WIN32
+#define ACCESS _access
+#define MKDIR(a) _mkdir((a))
+#define RMDIR(a) _rmdir((a))
+#elif __linux__
+#define ACCESS access
+#define MKDIR(a) mkdir((a),0755)
+#define RMDIR(a) rmdir((a))
+#endif
 
+bool MkDir(const std::string& strPath)
+{
+	int i = 0;
+	int nDirLen = strPath.length();
+	if (nDirLen <= 0)
+		return false;
+	char *pDirTemp = new char[nDirLen + 4];
+	strPath.copy(pDirTemp, nDirLen + 1, 0);// +1 to copy '\0'
+	pDirTemp[nDirLen] = '\0';
+	//在末尾加'/'
+	if (pDirTemp[nDirLen - 1] != '\\' && pDirTemp[nDirLen - 1] != '/')
+	{
+		pDirTemp[nDirLen] = '/';
+		pDirTemp[nDirLen + 1] = '\0';
+		nDirLen++;
+	}
+	// 创建目录
+	for (i = 0; i < nDirLen; i++)
+	{
+		if (pDirTemp[i] == '\\' || pDirTemp[i] == '/')
+		{
+			pDirTemp[i] = '\0';//截断后面的子目录，逐级查看目录是否存在，若不存在则创建
+			//如果不存在,创建
+			int statu;
+			statu = ACCESS(pDirTemp, 0);
+			if (statu != 0)//可能存在同名文件导致没有创建
+			{
+				statu = MKDIR(pDirTemp);
+				if (statu != 0)//可能上级不是文件夹而是同名文件导致创建失败
+				{
+					return false;
+				}
+			}
+			//支持linux,将所有\换成/
+			pDirTemp[i] = '/';
+		}
+	}
+	delete[] pDirTemp;
+	return true;
+}
+bool RmDir(const std::string & path)
+{
+	std::string strPath = path;
+#ifdef _WIN32
+	struct _finddata_t fb;   //查找相同属性文件的存储结构体
+	//制作用于正则化路径
+	if (strPath.at(strPath.length() - 1) != '\\' || strPath.at(strPath.length() - 1) != '/')
+		strPath.append("\\");
+	std::string findPath = strPath + "*";
+	intptr_t handle;//用long类型会报错
+	handle = _findfirst(findPath.c_str(), &fb);
+	//找到第一个匹配的文件
+	if (handle != -1L)
+	{
+		std::string pathTemp;
+		do//循环找到的文件 
+		{
+			//系统有个系统文件，名为“..”和“.”,对它不做处理  
+			if (strcmp(fb.name, "..")!=0 && strcmp(fb.name, ".")!=0)//对系统隐藏文件的处理标记
+			{
+				//制作完整路径
+				pathTemp.clear();
+				pathTemp = strPath + std::string(fb.name);
+				//属性值为16，则说明是文件夹，迭代  
+				if (fb.attrib == _A_SUBDIR)//_A_SUBDIR=16
+				{
+					RmDir(pathTemp.c_str());
+				}
+				//非文件夹的文件，直接删除。对文件属性值的情况没做详细调查，可能还有其他情况。  
+				else
+				{
+					remove(pathTemp.c_str());
+				}
+			}
+		} while (0 == _findnext(handle, &fb));//判断放前面会失去第一个搜索的结果
+		//关闭文件夹，只有关闭了才能删除。找这个函数找了很久，标准c中用的是closedir  
+		//经验介绍：一般产生Handle的函数执行后，都要进行关闭的动作。  
+		_findclose(handle);
+	}
+	//移除文件夹  
+	return RMDIR(strPath.c_str())==0?true:false;
+ 
+#elif __linux__
+	if (strPath.at(strPath.length() - 1) != '\\' || strPath.at(strPath.length() - 1) != '/')
+		strPath.append("/");
+	DIR *d = opendir(strPath.c_str());//打开这个目录
+	if (d != NULL)
+	{ 
+		struct dirent *dt = NULL;
+		while (dt = readdir(d))//逐个读取目录中的文件到dt
+		{
+			//系统有个系统文件，名为“..”和“.”,对它不做处理
+			if (strcmp(dt->d_name, "..")!=0 && strcmp(dt->d_name, ".")!=0)//判断是否为系统隐藏文件
+			{
+				struct stat st;//文件的信息
+				std::string fileName;//文件夹中的文件名
+				fileName = strPath + std::string(dt->d_name);
+				stat(fileName.c_str(), &st);
+				if (S_ISDIR(st.st_mode))
+				{
+					RmDir(fileName);
+				}
+				else
+				{
+					remove(fileName.c_str());
+				}
+			}
+		}
+		closedir(d);
+	}
+	return rmdir(strPath.c_str())==0?true:false;
+#endif
+ 
+}
+// 版权声明：本文为博主原创文章，遵循 CC 4.0 BY-SA 版权协议，转载请附上原文出处链接和本声明。
+// 原文链接：https://blog.csdn.net/venom_snake/article/details/88066475
 
 using std::cin,std::cout,std::ifstream,std::ofstream,std::endl,std::string,std::map,std::vector,std::to_string;
-using std::istringstream,std::istream,std::pair;
-
+using std::istringstream,std::istream,std::pair,std::sort,std::make_pair,std::atoi,std::getline,std::size_t;
 
 
 // 计算一个字符串中某个子串出现的次数
@@ -85,7 +222,7 @@ float ReadAfloat(istream& is){
 }
 bool DateBetween(string date, string start,string end){
     if(date.size() != 10 || start.size() != 10 || end.size() != 10){
-        return false;
+        return true;
     }
     int year = atoi(date.substr(0,4).c_str());
     int mouth = atoi(date.substr(5,2).c_str());
@@ -163,10 +300,12 @@ int main(int argc, char *argv[]){
         usage();
         exit(-1);
     }
+    //长度不为10则不使用时间范围
     string StartDate = "2024 01 01";
     string EndDate = "2024 07 04";
     string line;
 	map<string, int> checkin;
+    map<string,string> CheckInInfos;
     // 谁，这周第几次打卡，是星期几
     map<string,pair<int,int>> weekCache;
     // 谁，今天第几次打卡
@@ -176,6 +315,7 @@ int main(int argc, char *argv[]){
     // 注意定义
     getline(ifs,line);
     lineNum++;
+    ofstream oflog("log.txt");
 	while(1){
         // 2023-09-11 22:46:21 一行
         // 打卡 1 张慧源 12km
@@ -197,11 +337,14 @@ int main(int argc, char *argv[]){
 
             while(!isStartMsg(line)){
                 size_t it ;
-                if(!DateBetween(date,StartDate,EndDate)){Mov;continue;}
+                if(StartDate.size()==10&&EndDate.size()==10)
+                    if(!DateBetween(date,StartDate,EndDate)){Mov;continue;}
                 if((it=line.find("打卡"))==0){
                     if(line.size()>sizeof("打卡 7 张慧源张慧源张慧源张慧源 100km")){Mov;continue;}
                     else if(line.size()<sizeof("打卡1张1")){Mov;continue;};
-                    cout<<"正在处理:"<<line.substr(it+sizeof("打卡")-1)<<endl;
+                    CheckInfo += string("\n正在处理: 打卡")+line.substr(it+sizeof("打卡")-1)+string("\n");
+                    // cout<<"正在处理:"<<line.substr(it+sizeof("打卡")-1)<<endl;
+
                     istringstream iss(line.substr(it+sizeof("打卡")-1));
                     char tmp='0';
                     int TimesOfAWeek;
@@ -229,9 +372,9 @@ int main(int argc, char *argv[]){
                     }
                     if(distance<1.0){Mov;continue;}
 
-
+                    CheckInfo += string("文法处理结果: name: <")+name+string("> distance: <")+to_string(distance)+string(">\n");
                     /*                                  log                                             */
-                    cout<<"\n处理结果: "<<" name: <"<<name<<"> distance: <"<<distance<<">"<<endl;
+                    // cout<<"\n处理结果: "<<" name: <"<<name<<"> distance: <"<<distance<<">"<<endl;
                     /*                                  log                                             */
                     
                     int score = 0;
@@ -251,21 +394,28 @@ int main(int argc, char *argv[]){
                     if(distance >= 42.195){
                         score += 20;
                     }
-                    // 一天可以打卡多次，每次都可以积分。每天可以多打，但是只能算一周的一天打卡了
-                    checkin[name] += score;
-                    if(WeekDay != weekCache[name].second){// 今天第一次打卡
+                    if(!weekCache[name].second || WeekDay != weekCache[name].second){// 今天第一次打卡
                         weekCache[name].first++;
                         weekCache[name].second = WeekDay;
+                        if(weekCache[name].first == 4){
+                            score += 10;
+                        }
+                        else if(weekCache[name].first == 7){
+                            score += 10;
+                        }
                     }
                     // 毅行、爬山等非跑步活动打卡距离将以 0.5 倍等效于跑步打卡距离计算积分。
                     // 一天可以打卡多次，每次都可以积分。
                     // (3)每周打卡天数超过或等于四天的，额外加 10 分，七天每天打卡的 加 20 分。
-                    if(weekCache[name].first == 4){
-                        checkin[name] += 10;
-                    }
-                    if(weekCache[name].first == 7){
-                        checkin[name] += 20;
-                    }
+                    
+
+                    // 一天可以打卡多次，每次都可以积分。每天可以多打，但是只能算一周的一天打卡了
+                    checkin[name] += score;
+                    CheckInfo += string("语义处理结果: score: <")+to_string(score)+"> 当前总分: <"+to_string(checkin[name])+">"+"\n";
+                    CheckInInfos[name] += CheckInfo;
+                    
+
+                    oflog << CheckInfo;
                 }
                 Mov
             }
@@ -278,10 +428,23 @@ int main(int argc, char *argv[]){
     }
     // out
     ofstream ofs("Statistics.txt");
+    vector<pair<int,string>>OutCheckin;
     for(auto &p : checkin){
-        ofs << p.first << " " << p.second << endl;
+        OutCheckin.push_back(make_pair(p.second,p.first));
+    }
+    sort(OutCheckin.begin(),OutCheckin.end(),[](pair<int,string>&a,pair<int,string>&b){return a.first>b.first;});//降序
+    ofs<<"姓名\t\t积分"<<endl;
+    for(auto &p : OutCheckin){
+        ofs << p.second << "\t\t" << p.first << endl;
     }
     ofs.close();
+    oflog.close();
+    MkDir("Log");
+    for(auto & p:CheckInInfos){
+        ofstream ofs("Log/"+p.first+".txt");
+        ofs << p.second;
+        ofs.close();
+    }
     return 0;
 }
 /*

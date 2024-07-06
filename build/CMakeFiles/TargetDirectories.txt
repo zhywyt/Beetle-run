@@ -1,3 +1,0 @@
-/home/zhywyt/Documents/文科/甲壳虫跑团/打卡/Beetle-run/build/CMakeFiles/Statistics.dir
-/home/zhywyt/Documents/文科/甲壳虫跑团/打卡/Beetle-run/build/CMakeFiles/edit_cache.dir
-/home/zhywyt/Documents/文科/甲壳虫跑团/打卡/Beetle-run/build/CMakeFiles/rebuild_cache.dir
