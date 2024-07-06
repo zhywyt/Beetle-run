@@ -1,0 +1,1 @@
+/usr/bin/c++ -O0 -Werror CMakeFiles/Statistics.dir/src/Statistics.cpp.o -o Statistics 
