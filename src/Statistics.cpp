@@ -18,6 +18,7 @@ https://github.com/LC044/WeChatMsg
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include "replaceCharactersInFile.hpp"
 // —————————————————————————————————————————————————
 #ifdef _WIN32
 #include <direct.h>		//for mkdir rmdir
@@ -170,7 +171,7 @@ int countOccurrences(const std::string& str, const std::string& substr) {
     return count;
 }
 void usage(){
-    cout << "usage: ./Statistics /path/to/WeChatMsg/ChatExport.txt" << endl;
+    cout << "usage: ./Statistics /path/to/WeChatMsg/ChatExport.txt /path/to/WeChatMsg/ChatExport2.txt" << endl;
 }
 bool isStartMsg(string&line){
     if(line.size() > 19){
@@ -288,20 +289,37 @@ usage:
     2023-09-11 22:46:21 一行
     打卡 1 张慧源 12km
 */
-#define Mov if(getline(ifs,line)){lineNum++;cout<<CheckInfo<<endl;}else{break;}
+#define Mov if(getline(ifs,line)){lineNum++;}else{break;}
 int main(int argc, char *argv[]){
-    if(argc != 2){
+    if(argc < 2){
         usage();
         exit(-1);
     }
-    ifstream ifs(argv[1]);
-    if(!ifs){
-        cout << "open file failed" << endl;
-        usage();
-        exit(-1);
+    map<char,char>replaceMap={{'-',' '}};
+    for(int i = 1;i<argc;i++){
+        if(replaceCharactersInFile(argv[i],replaceMap)){
+            cout << "replace file " << argv[i] << " success" << endl;
+        }
     }
+    std::map<ifstream*, string> stream_file_table;
+    vector<ifstream> ifsv(argc-1);
+    for(int i = 1;i<argc;i++){
+        ifsv[i-1].open(argv[i]);
+        if(!ifsv[i-1]){
+            cout << "open file failed" << endl;
+            usage();
+            exit(-1);
+        }
+        stream_file_table[&ifsv[i-1]] = argv[i];
+    }
+    // ifstream ifs(argv[1]);
+    // if(!ifs){
+    //     cout << "open file failed" << endl;
+    //     usage();
+    //     exit(-1);
+    // }
     //长度不为10则不使用时间范围
-    string StartDate = "2024 01 01";
+    string StartDate = "2024 03 04";
     string EndDate = "2024 07 04";
     string line;
 	map<string, int> checkin;
@@ -311,131 +329,135 @@ int main(int argc, char *argv[]){
     // 谁，今天第几次打卡
     // map<string,int> dayCache;
     size_t lineNum = 0;
-
-    // 注意定义
-    getline(ifs,line);
-    lineNum++;
     ofstream oflog("log.txt");
-	while(1){
-        // 2023-09-11 22:46:21 一行
-        // 打卡 1 张慧源 12km
-        // 存在时间的为一条消息的开始，等到下一条消息开始时，统计上一条消息的打卡情况，中间可能出现很多行，但是都是一条消息
-        if(isStartMsg(line)){
-            //保存整条打卡信息（包括行号），用于调试
-            string CheckInfo =line;
-            CheckInfo = string("[ ")+to_string(lineNum)+string(" ] ")+CheckInfo;
+    // 注意定义
+    for(auto & ifs:ifsv){
+        getline(ifs,line);
+        lineNum++;
+        string filename = stream_file_table[&ifs];
+        oflog<<"\n<<<<<<<<<<<<<<<<<<<<<<<< "<< filename <<" >>>>>>>>>>>>>>>>>>>>>>>>>\n";
+        while(1){
+            // 2023-09-11 22:46:21 一行
+            // 打卡 1 张慧源 12km
+            // 存在时间的为一条消息的开始，等到下一条消息开始时，统计上一条消息的打卡情况，中间可能出现很多行，但是都是一条消息
+            if(isStartMsg(line)){
+                //保存整条打卡信息（包括行号），用于调试
+                string CheckInfo =line;
+                CheckInfo = string("In file [")+ filename + string("] line [ ")+to_string(lineNum)+string(" ] ")+CheckInfo;
 
-            string date = line.substr(0,10);
-            string SName = line.substr(19);
-            //周一清理缓存
-            int WeekDay = WhichDayOfAWeek(atoi(date.substr(0,4).c_str()),atoi(date.substr(5,2).c_str()),atoi(date.substr(8,2).c_str()));
-            if(WeekDay == 0){
-                weekCache.clear();
-            }
-            // 注意定义
-            Mov
-
-            while(!isStartMsg(line)){
-                size_t it ;
-                if(StartDate.size()==10&&EndDate.size()==10)
-                    if(!DateBetween(date,StartDate,EndDate)){Mov;continue;}
-                if((it=line.find("打卡"))==0){
-                    if(line.size()>sizeof("打卡 7 张慧源张慧源张慧源张慧源 100km")){Mov;continue;}
-                    else if(line.size()<sizeof("打卡1张1")){Mov;continue;};
-                    CheckInfo += string("\n正在处理: 打卡")+line.substr(it+sizeof("打卡")-1)+string("\n");
-                    // cout<<"正在处理:"<<line.substr(it+sizeof("打卡")-1)<<endl;
-
-                    istringstream iss(line.substr(it+sizeof("打卡")-1));
-                    char tmp='0';
-                    int TimesOfAWeek;
-                    while(iss>>tmp){
-                        if(tmp>='0'&&tmp<='9'||tmp!=' '){
-                            break;
-                        }
-                    }
-                    if(tmp<'1'||tmp>'7'){
-                        Mov;
-                        continue;
-                    }
-                    TimesOfAWeek = tmp-'0';
-                    string name ;
-                    if(!(iss >> name)){Mov;continue;}
-                    
-                    float distance;
-                    try{
-                    distance = ReadAfloat(iss);
-                    }
-                    catch(const char* msg){
-                        cout<<msg<<endl;
-                        Mov;
-                        continue;
-                    }
-                    if(distance<1.0){Mov;continue;}
-
-                    CheckInfo += string("文法处理结果: name: <")+name+string("> distance: <")+to_string(distance)+string(">\n");
-                    /*                                  log                                             */
-                    // cout<<"\n处理结果: "<<" name: <"<<name<<"> distance: <"<<distance<<">"<<endl;
-                    /*                                  log                                             */
-                    
-                    int score = 0;
-                    if(distance <= 5){
-                        score = distance;
-                    }else{
-                        score = 5 + (distance-5)*2;
-                    }
-                    if(score > 25){
-                        score = 25;
-                    }
-                    // 跑步达到半程马拉松距离，额外加 10 分，达到全程马拉松距离，额
-                    // 外加 20 分。
-                    if(distance >= 21.0975){
-                        score += 10;
-                    }
-                    if(distance >= 42.195){
-                        score += 20;
-                    }
-                    if(!weekCache[name].second || WeekDay != weekCache[name].second){// 今天第一次打卡
-                        weekCache[name].first++;
-                        weekCache[name].second = WeekDay;
-                        if(weekCache[name].first == 4){
-                            score += 10;
-                        }
-                        else if(weekCache[name].first == 7){
-                            score += 10;
-                        }
-                    }
-                    // 毅行、爬山等非跑步活动打卡距离将以 0.5 倍等效于跑步打卡距离计算积分。
-                    // 一天可以打卡多次，每次都可以积分。
-                    // (3)每周打卡天数超过或等于四天的，额外加 10 分，七天每天打卡的 加 20 分。
-                    
-
-                    // 一天可以打卡多次，每次都可以积分。每天可以多打，但是只能算一周的一天打卡了
-                    checkin[name] += score;
-                    CheckInfo += string("语义处理结果: score: <")+to_string(score)+"> 当前总分: <"+to_string(checkin[name])+">"+"\n";
-                    CheckInInfos[name] += CheckInfo;
-                    
-
-                    oflog << CheckInfo;
+                string date = line.substr(0,10);
+                string SName = line.substr(19);
+                //周一清理缓存
+                int WeekDay = WhichDayOfAWeek(atoi(date.substr(0,4).c_str()),atoi(date.substr(5,2).c_str()),atoi(date.substr(8,2).c_str()));
+                if(WeekDay == 0){
+                    weekCache.clear();
                 }
+                // 注意定义
                 Mov
-            }
-            
-        }
-        else{
-            break;
-        }
 
+                while(!isStartMsg(line)){
+                    size_t it ;
+                    if(StartDate.size()==10&&EndDate.size()==10)
+                        if(!DateBetween(date,StartDate,EndDate)){Mov;continue;}
+                    if((it=line.find("打卡"))==0){
+                        if(line.size()>sizeof("打卡 7 张慧源张慧源张慧源张慧源 100km")){Mov;continue;}
+                        else if(line.size()<sizeof("打卡1张1")){Mov;continue;};
+                        CheckInfo += string("\n正在处理: 打卡")+line.substr(it+sizeof("打卡")-1)+string("\n");
+                        // cout<<"正在处理:"<<line.substr(it+sizeof("打卡")-1)<<endl;
+
+                        istringstream iss(line.substr(it+sizeof("打卡")-1));
+                        char tmp='0';
+                        int TimesOfAWeek;
+                        while(iss>>tmp){
+                            if(tmp>='0'&&tmp<='9'||tmp!=' '){
+                                break;
+                            }
+                        }
+                        if(tmp<'1'||tmp>'7'){
+                            CheckInfo += string("\t[error!]\t打卡次数不正确\n");
+                            Mov;
+                            continue;
+                        }
+                        TimesOfAWeek = tmp-'0';
+                        string name ;
+                        if(!(iss >> name)){Mov;continue;}
+                        
+                        float distance;
+                        try{
+                        distance = ReadAfloat(iss);
+                        }
+                        catch(const char* msg){
+                            cout<<msg<<endl;
+                            Mov;
+                            continue;
+                        }
+                        if(distance<1.0){Mov;continue;}
+
+                        CheckInfo += string("文法处理结果: name: <")+name+string("> distance: <")+to_string(distance)+string(">\n");
+                        /*                                  log                                             */
+                        // cout<<"\n处理结果: "<<" name: <"<<name<<"> distance: <"<<distance<<">"<<endl;
+                        /*                                  log                                             */
+                        
+                        int score = 0;
+                        if(distance <= 5){
+                            score = distance;
+                        }else{
+                            score = 5 + (distance-5)*2;
+                        }
+                        if(score > 25){
+                            score = 25;
+                        }
+                        // 跑步达到半程马拉松距离，额外加 10 分，达到全程马拉松距离，额
+                        // 外加 20 分。
+                        if(distance >= 21.0975){
+                            score += 10;
+                        }
+                        if(distance >= 42.195){
+                            score += 20;
+                        }
+                        if(!weekCache[name].second || WeekDay != weekCache[name].second){// 今天第一次打卡
+                            weekCache[name].first++;
+                            weekCache[name].second = WeekDay;
+                            if(weekCache[name].first == 4){
+                                score += 10;
+                            }
+                            else if(weekCache[name].first == 7){
+                                score += 10;
+                            }
+                        }
+                        // 毅行、爬山等非跑步活动打卡距离将以 0.5 倍等效于跑步打卡距离计算积分。
+                        // 一天可以打卡多次，每次都可以积分。
+                        // (3)每周打卡天数超过或等于四天的，额外加 10 分，七天每天打卡的 加 20 分。
+                        
+
+                        // 一天可以打卡多次，每次都可以积分。每天可以多打，但是只能算一周的一天打卡了
+                        checkin[name] += score;
+                        CheckInfo += string("语义处理结果: score: <")+to_string(score)+"> 当前总分: <"+to_string(checkin[name])+">"+"\n";
+                        CheckInInfos[name] += CheckInfo;
+                        
+
+                        oflog << CheckInfo;
+                        cout<<CheckInfo<<endl;
+                    }
+                    Mov
+                }
+                
+            }
+            else{
+                break;
+            }
+        }
+        // out
     }
-    // out
     ofstream ofs("Statistics.txt");
     vector<pair<int,string>>OutCheckin;
     for(auto &p : checkin){
         OutCheckin.push_back(make_pair(p.second,p.first));
     }
     sort(OutCheckin.begin(),OutCheckin.end(),[](pair<int,string>&a,pair<int,string>&b){return a.first>b.first;});//降序
-    ofs<<"姓名\t\t积分"<<endl;
+    ofs<<"姓名\t积分"<<endl;
     for(auto &p : OutCheckin){
-        ofs << p.second << "\t\t" << p.first << endl;
+        ofs << p.second << "\t" << p.first << endl;
     }
     ofs.close();
     oflog.close();
