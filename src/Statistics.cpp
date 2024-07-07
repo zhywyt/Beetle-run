@@ -190,7 +190,7 @@ int WhichDayOfAWeek(int year,int mouth,int day){
         mouth += 12;
         year--;
     }
-    int week = (day + 2*mouth + 3*(mouth+1)/5 + year + year/4 - year/100 + year/400) % 7;
+    int week = (day + 2*mouth + 3*(mouth+1)/5 + year + year/4 - year/100 + year/400) % 7+1;
     return week;
 }
 float ReadAfloat(istream& is){
@@ -208,6 +208,9 @@ float ReadAfloat(istream& is){
         }else if(c=='.'){
             break;
         }
+        else {
+            return f;
+        }
     }
     // 读取小数点后的部分
     float d = 0.1;
@@ -221,64 +224,37 @@ float ReadAfloat(istream& is){
     }
     return f;
 }
-bool DateBetween(string date, string start,string end){
-    if(date.size() != 10 || start.size() != 10 || end.size() != 10){
+//return a>b
+bool DateBigger(string a,string b){
+    int year = atoi(a.substr(0,4).c_str());
+    int mouth = atoi(a.substr(5,2).c_str());
+    int day = atoi(a.substr(8,2).c_str());
+    int bYear = atoi(b.substr(0,4).c_str());
+    int bMouth = atoi(b.substr(5,2).c_str());
+    int bDay = atoi(b.substr(8,2).c_str());
+    if(year>bYear){
         return true;
     }
-    int year = atoi(date.substr(0,4).c_str());
-    int mouth = atoi(date.substr(5,2).c_str());
-    int day = atoi(date.substr(8,2).c_str());
-    int startYear = atoi(start.substr(0,4).c_str());
-    int startMouth = atoi(start.substr(5,2).c_str());
-    int startDay = atoi(start.substr(8,2).c_str());
-    int endYear = atoi(end.substr(0,4).c_str());
-    int endMouth = atoi(end.substr(5,2).c_str());
-    int endDay = atoi(end.substr(8,2).c_str());
-    if(year > startYear && year < endYear){
-        return true;
-    }
-    if(year == startYear && year == endYear){
-        if(mouth > startMouth && mouth < endMouth){
+    else if(year==bYear){
+        if(mouth>bMouth){
             return true;
         }
-        if(mouth == startMouth && mouth == endMouth){
-            if(day >= startDay && day <= endDay){
-                return true;
-            }
-        }
-        if(mouth == startMouth){
-            if(day >= startDay){
-                return true;
-            }
-        }
-        if(mouth == endMouth){
-            if(day <= endDay){
-                return true;
-            }
-        }
-    }
-    if(year == startYear){
-        if(mouth > startMouth){
-            return true;
-        }
-        if(mouth == startMouth){
-            if(day >= startDay){
-                return true;
-            }
-        }
-    }
-    if(year == endYear){
-        if(mouth < endMouth){
-            return true;
-        }
-        if(mouth == endMouth){
-            if(day <= endDay){
+        else if(mouth==bMouth){
+            if(day>bDay){
                 return true;
             }
         }
     }
     return false;
 }
+//2024 03 04
+bool DateBetween(string date, string start,string end){
+    if(date.size() != 10 || start.size() != 10 || end.size() != 10){
+        return true;
+    }
+    return DateBigger(date,start)&&DateBigger(end,date);
+}
+
 /*
 main 函数接受命令行参数
  1 聊天记录文件路径
@@ -323,6 +299,7 @@ int main(int argc, char *argv[]){
     string EndDate = "2024 07 04";
     string line;
 	map<string, int> checkin;
+    map<string,int> checkinDis;
     map<string,string> CheckInInfos;
     // 谁，这周第几次打卡，是星期几
     map<string,pair<int,int>> weekCache;
@@ -330,6 +307,7 @@ int main(int argc, char *argv[]){
     // map<string,int> dayCache;
     size_t lineNum = 0;
     ofstream oflog("log.txt");
+    int CleanFlag=true;
     // 注意定义
     for(auto & ifs:ifsv){
         getline(ifs,line);
@@ -349,8 +327,13 @@ int main(int argc, char *argv[]){
                 string SName = line.substr(19);
                 //周一清理缓存
                 int WeekDay = WhichDayOfAWeek(atoi(date.substr(0,4).c_str()),atoi(date.substr(5,2).c_str()),atoi(date.substr(8,2).c_str()));
-                if(WeekDay == 0){
+                // 并不是每个人到了星期一都要清除cache，这里出问题了
+                if(CleanFlag&&(WeekDay==1)){
                     weekCache.clear();
+                    CleanFlag = false;
+                }
+                else if(WeekDay!=1){
+                    CleanFlag=1;
                 }
                 // 注意定义
                 Mov
@@ -391,7 +374,7 @@ int main(int argc, char *argv[]){
                             Mov;
                             continue;
                         }
-                        if(distance<1.0){Mov;continue;}
+                        if(distance<1.0||distance>100){Mov;continue;}
 
                         CheckInfo += string("文法处理结果: name: <")+name+string("> distance: <")+to_string(distance)+string(">\n");
                         /*                                  log                                             */
@@ -401,23 +384,29 @@ int main(int argc, char *argv[]){
                         int score = 0;
                         if(distance <= 5){
                             score = distance;
-                        }else{
-                            score = 5 + (distance-5)*2;
                         }
-                        if(score > 25){
+                        else if(score > 25){
                             score = 25;
+                        }
+                        else{
+                            score = std::min(25,int(5 + (distance-5)*2));
                         }
                         // 跑步达到半程马拉松距离，额外加 10 分，达到全程马拉松距离，额
                         // 外加 20 分。
-                        if(distance >= 21.0975){
+                        if(distance >= 21){
                             score += 10;
                         }
-                        if(distance >= 42.195){
+                        else if(distance >= 42){
                             score += 20;
                         }
-                        if(!weekCache[name].second || WeekDay != weekCache[name].second){// 今天第一次打卡
+                        if(!(weekCache[name].first) || (WeekDay != weekCache[name].second)){// 今天第一次打卡
                             weekCache[name].first++;
                             weekCache[name].second = WeekDay;
+                            // 一天可以打卡多次，每次都可以积分。
+                            // (3)每周打卡天数超过或等于四天的，额外加 10 分，七天每天打卡的 加 20 分。
+                            
+                            // CheckInfo += string("######################次数加一######################\n");
+
                             if(weekCache[name].first == 4){
                                 score += 10;
                             }
@@ -426,14 +415,13 @@ int main(int argc, char *argv[]){
                             }
                         }
                         // 毅行、爬山等非跑步活动打卡距离将以 0.5 倍等效于跑步打卡距离计算积分。
-                        // 一天可以打卡多次，每次都可以积分。
-                        // (3)每周打卡天数超过或等于四天的，额外加 10 分，七天每天打卡的 加 20 分。
+                        // TODO 
                         
 
-                        // 一天可以打卡多次，每次都可以积分。每天可以多打，但是只能算一周的一天打卡了
                         checkin[name] += score;
-                        CheckInfo += string("语义处理结果: score: <")+to_string(score)+"> 当前总分: <"+to_string(checkin[name])+">"+"\n";
-                        CheckInInfos[name] += CheckInfo;
+                        checkinDis[name] += distance;
+                        CheckInfo += string("语义处理结果:今天是周 <")+ to_string(WeekDay) + "> 打卡次数:<"+to_string(weekCache[name].first)+"> score: <"+to_string(score)+"> 当前总分: <"+to_string(checkin[name])+">"+" 当前总距离: <"+to_string(checkinDis[name])+">"+"\n";
+                        CheckInInfos[name] += CheckInfo+"\n";
                         
 
                         oflog << CheckInfo;
@@ -455,9 +443,9 @@ int main(int argc, char *argv[]){
         OutCheckin.push_back(make_pair(p.second,p.first));
     }
     sort(OutCheckin.begin(),OutCheckin.end(),[](pair<int,string>&a,pair<int,string>&b){return a.first>b.first;});//降序
-    ofs<<"姓名\t积分"<<endl;
+    ofs<<"姓名\t积分\t距离"<<endl;
     for(auto &p : OutCheckin){
-        ofs << p.second << "\t" << p.first << endl;
+        ofs << p.second << "\t" << p.first <<"\t"<<checkinDis[p.second]<< endl;
     }
     ofs.close();
     oflog.close();
