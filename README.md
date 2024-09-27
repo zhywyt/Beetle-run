@@ -2,7 +2,16 @@
 甲壳虫跑团相关代码/资料
 
 本项目微信聊天记录导出使用了[ChatMsg](https://github.com/LC044/WeChatMsg.git)进行导出。
-
+## 编译
+```bash
+git clone https://github.com/zhywyt/Beetle-run.git
+cd Beetle-run
+mkdir build
+cd build
+cmake ..
+make -j4
+./Statistics /path/to/your/data.txt
+```
 ## 更新
 ### 2024.9.27
 添加了例跑打卡格式的识别
