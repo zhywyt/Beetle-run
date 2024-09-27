@@ -254,7 +254,42 @@ bool DateBetween(string date, string start,string end){
     }
     return DateBigger(date,start)&&DateBigger(end,date);
 }
-
+//计算日常打卡分数
+int CalNormal(float dis, map<string,pair<int,int>>* weekCache=nullptr, const string& name="", int WeekDay = 0, bool IsFirstOfDay = false){
+    /*
+    dis : km 
+    IsFirstOfDay : 是否是当天的第一次打卡
+    Times : 本周第几次打卡
+    */
+    int score = 0;
+    int distance = static_cast<int>(dis);
+    if(distance <= 5){
+        score = distance;
+    }
+    else if(distance >25){
+        score = 25;
+    }
+    else {
+        score = std::min(25,int(5+(distance-5)*2));
+    }
+    if(distance >=21){
+        score +=10;
+    }
+    else if(distance >= 42){
+        score += 20;
+    }
+    if(IsFirstOfDay){
+        (*weekCache)[name].first++;
+        (*weekCache)[name].second = WeekDay;
+        if((*weekCache)[name].first == 4){
+            score += 10;
+        }
+        else if((*weekCache)[name].first == 7){
+            score +=20;
+        }
+    }
+    return score;
+}
 /*
 main 函数接受命令行参数
  1 聊天记录文件路径
@@ -295,8 +330,10 @@ int main(int argc, char *argv[]){
     //     exit(-1);
     // }
     //长度不为10则不使用时间范围
-    string StartDate = "2024 03 04";
-    string EndDate = "2024 07 04";
+    // string StartDate = "2024 03 04";
+    // string EndDate = "2024 07 04";
+    string StartDate = "";
+    string EndDate = "";
     string line;
 	map<string, int> checkin;
     map<string,int> checkinDis;
@@ -380,39 +417,12 @@ int main(int argc, char *argv[]){
                         /*                                  log                                             */
                         // cout<<"\n处理结果: "<<" name: <"<<name<<"> distance: <"<<distance<<">"<<endl;
                         /*                                  log                                             */
-                        
-                        int score = 0;
-                        if(distance <= 5){
-                            score = distance;
-                        }
-                        else if(score > 25){
-                            score = 25;
-                        }
-                        else{
-                            score = std::min(25,int(5 + (distance-5)*2));
-                        }
-                        // 跑步达到半程马拉松距离，额外加 10 分，达到全程马拉松距离，额
-                        // 外加 20 分。
-                        if(distance >= 21){
-                            score += 10;
-                        }
-                        else if(distance >= 42){
-                            score += 20;
-                        }
-                        if(!(weekCache[name].first) || (WeekDay != weekCache[name].second)){// 今天第一次打卡
-                            weekCache[name].first++;
-                            weekCache[name].second = WeekDay;
-                            // 一天可以打卡多次，每次都可以积分。
-                            // (3)每周打卡天数超过或等于四天的，额外加 10 分，七天每天打卡的 加 20 分。
-                            
-                            // CheckInfo += string("######################次数加一######################\n");
-
-                            if(weekCache[name].first == 4){
-                                score += 10;
-                            }
-                            else if(weekCache[name].first == 7){
-                                score += 10;
-                            }
+                        bool IsFirstOfDay =!(weekCache[name].first) || (WeekDay != weekCache[name].second);  
+                        int score;
+                        if(IsFirstOfDay){
+                            score = CalNormal(distance, &weekCache, name, WeekDay, IsFirstOfDay);
+                        } else{
+                            score = CalNormal(distance);
                         }
                         // 毅行、爬山等非跑步活动打卡距离将以 0.5 倍等效于跑步打卡距离计算积分。
                         // TODO 
@@ -421,6 +431,45 @@ int main(int argc, char *argv[]){
                         checkin[name] += score;
                         checkinDis[name] += distance;
                         CheckInfo += string("语义处理结果:今天是周 <")+ to_string(WeekDay) + "> 打卡次数:<"+to_string(weekCache[name].first)+"> score: <"+to_string(score)+"> 当前总分: <"+to_string(checkin[name])+">"+" 当前总距离: <"+to_string(checkinDis[name])+">"+"\n";
+                        CheckInInfos[name] += CheckInfo+"\n";
+                        
+
+                        oflog << CheckInfo;
+                        cout<<CheckInfo<<endl;
+                    }
+                    else if((it=line.find("例跑卡"))==0){
+                        // 检查格式 例跑卡 <性别> <名字> <距离>
+                        // 不合理格式剔除
+                        if(line.size() > sizeof("例跑卡 男男男 张慧源张慧源张慧源 100km")){Mov;continue;}
+                        else if(line.size() < sizeof("例跑卡 男")){Mov;continue;}
+                        CheckInfo += string("\n正在处理:例跑卡")+line.substr(it+sizeof("例跑卡")-1)+string("\n");
+                        istringstream iss(line.substr(it+sizeof("例跑卡")-1));
+                        string sex;
+                        string name;
+                        float distance;
+                        iss >> sex >> name ;
+                        if(sex!="男"&&sex!="女"){
+                            CheckInfo += string("性别错误\n");
+                            Mov;continue;
+                        }
+                        try{
+                            distance = ReadAfloat(iss);
+                        }
+                        catch(const char* msg){
+                            CheckInfo += string(msg)+"\n";
+                            Mov;continue;
+                        }
+                        if(distance < 0||distance >100){
+                            CheckInfo += string("距离"+to_string(distance)+"km错误\n");
+                            Mov;continue;
+                        }
+                        CheckInfo += string("文法处理结果: name: <")+name+string("> distance: <")+to_string(distance)+string(">\n");
+                        int score;
+                        score = CalNormal(distance)*2;
+                        checkin[name] += score;
+                        checkinDis[name] += distance;
+
+                        CheckInfo += string("语义处理结果 <例跑卡> :") + " score: <"+to_string(score)+"> 当前总分: <"+to_string(checkin[name])+">"+" 当前总距离: <"+to_string(checkinDis[name])+">"+"\n";
                         CheckInInfos[name] += CheckInfo+"\n";
                         
 
